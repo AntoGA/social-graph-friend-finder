@@ -1,0 +1,21 @@
+name: Python checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Syntax
+        run: python -m compileall -q friend_graph.py social_api.py social_sync.py test_app.py
+      - name: Unit tests
+        run: python -m unittest discover -v
+      - name: CLI smoke test
+        run: python friend_graph.py example_edges.csv alice --json --stats
