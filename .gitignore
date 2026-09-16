@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+*.token
+private/
+secrets/
+social_edges.csv
+identity_map.csv
+identities.csv
+.sync-*

@@ -1,0 +1,13 @@
+source,target
+alice,bob
+alice,charlie
+alice,frank
+bob,charlie
+bob,diana
+bob,elena
+charlie,diana
+charlie,george
+diana,elena
+elena,george
+frank,george
+george,helen
