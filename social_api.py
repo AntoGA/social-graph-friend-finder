@@ -57,6 +57,15 @@ def request_json(url, token, *, form=None, params=None):
     return result
 
 
+def validated_id(value):
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise SocialAPIError('Invalid account ID')
+    value = str(value)
+    if not value.isascii() or not value.isdecimal() or int(value) <= 0:
+        raise SocialAPIError('Invalid account ID')
+    return value
+
+
 class VKClient:
     def __init__(self, token, version='5.199'):
         if not token or not re.fullmatch(r'\d+\.\d+', version):
@@ -71,21 +80,30 @@ class VKClient:
         return data['response']
 
     def get_me(self):
-        return SocialAccount('vk', str(self.call('users.get')[0]['id']))
+        return SocialAccount('vk', validated_id(self.call('users.get')[0]['id']))
 
     def iter_friends(self):
         offset = 0
         seen = set()
+        expected_count = None
         for _ in range(10000):
             response = self.call('friends.get', offset=offset, count=1000)
-            items = response['items']
-            if not isinstance(items, list):
+            if not isinstance(response, dict):
+                raise SocialAPIError('Invalid VK page')
+            items, count = response.get('items'), response.get('count')
+            if type(count) is not int or count < 0:
+                raise SocialAPIError('Invalid VK count')
+            if expected_count is None:
+                expected_count = count
+            if count != expected_count:
+                raise SocialAPIError('Unstable VK count; retry snapshot')
+            if not isinstance(items, list) or offset + len(items) > count:
                 raise SocialAPIError('Invalid VK page')
             if not items:
                 if offset < response['count']:
                     raise SocialAPIError('Incomplete VK snapshot')
                 return
-            ids = [str(item['id'] if isinstance(item, dict) else item) for item in items]
+            ids = [validated_id(item.get('id') if isinstance(item, dict) else item) for item in items]
             if any(value in seen for value in ids) or len(set(ids)) != len(ids):
                 raise SocialAPIError('Unstable VK pagination; retry snapshot')
             seen.update(ids)
@@ -105,17 +123,24 @@ class FacebookClient:
         self.base = f'https://graph.facebook.com/{version}'
 
     def get_me(self):
-        return SocialAccount('facebook', str(request_json(self.base + '/me', self.token, params={'fields': 'id'})['id']))
+        return SocialAccount('facebook', validated_id(request_json(self.base + '/me', self.token, params={'fields': 'id'})['id']))
 
     def iter_friends(self):
         params = {'fields': 'id', 'limit': 100}
         cursors = set()
+        seen = set()
         for _ in range(10000):
             response = request_json(self.base + '/me/friends', self.token, params=params)
             if not isinstance(response.get('data'), list):
                 raise SocialAPIError('Invalid Facebook page')
             for item in response['data']:
-                yield SocialAccount('facebook', str(item['id']))
+                if not isinstance(item, dict):
+                    raise SocialAPIError('Invalid Facebook account')
+                ident = validated_id(item.get('id'))
+                if ident in seen:
+                    raise SocialAPIError('Unstable Facebook pagination; retry snapshot')
+                seen.add(ident)
+                yield SocialAccount('facebook', ident)
             paging = response.get('paging', {})
             if not paging.get('next'):
                 return

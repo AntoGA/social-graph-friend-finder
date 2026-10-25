@@ -16,6 +16,13 @@ jobs:
       - name: Syntax
         run: python -m compileall -q friend_graph.py social_api.py social_sync.py test_app.py
       - name: Unit tests
-        run: python -m unittest discover -v
+        run: python -m unittest discover -v 2>&1 | tee test-results.log
       - name: CLI smoke test
         run: python friend_graph.py example_edges.csv alice --json --stats
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.python-version || '3.12' }}
+          path: test-results.log
+          if-no-files-found: warn
